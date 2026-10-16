@@ -51,8 +51,16 @@ class AppCtrl extends ChangeNotifier {
     final sandboxId = dotenv.env['LIVEKIT_SANDBOX_ID']?.replaceAll('"', '');
     final agentName = dotenv.env['LIVEKIT_AGENT_NAME']?.replaceAll('"', '').trim();
     final agentDeployment = dotenv.env['LIVEKIT_AGENT_DEPLOYMENT']?.replaceAll('"', '').trim();
+    // Jarvis's phone token server on your PC (jarvis_new/src/phone_server.py).
+    final tokenEndpoint = dotenv.env['LIVEKIT_TOKEN_ENDPOINT']?.replaceAll('"', '').trim();
+    final phoneKey = dotenv.env['JARVIS_PHONE_KEY']?.replaceAll('"', '').trim();
     sdk.EndpointTokenSource tokenSource;
-    if (sandboxId == null || sandboxId.isEmpty || sandboxId == '<your-sandbox-id>') {
+    if (tokenEndpoint != null && tokenEndpoint.isNotEmpty) {
+      tokenSource = sdk.EndpointTokenSource(
+        url: Uri.parse(tokenEndpoint),
+        headers: {if (phoneKey != null && phoneKey.isNotEmpty) 'x-jarvis-key': phoneKey},
+      );
+    } else if (sandboxId == null || sandboxId.isEmpty || sandboxId == '<your-sandbox-id>') {
       tokenSource = sdk.EndpointTokenSource(url: Uri.parse(homepageAgentTokenEndpoint));
     } else {
       tokenSource = sdk.DevelopmentTokenSource(id: sandboxId);

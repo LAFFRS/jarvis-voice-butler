@@ -32,6 +32,14 @@
 	<string>Voice Assistant uses your camera</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voice Assistant uses your microphone</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connects to Jarvis running on your PC</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Lets the app reach Jarvis's token server on your home network over HTTP. -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

@@ -84,7 +84,8 @@ This opens the agent and the web UI in their own windows and opens
 |---|---|
 | `.\jarvis.ps1 -Mode local` | Use local mode for this run |
 | `.\jarvis.ps1 -Console` | Talk to Jarvis in the terminal only |
-| `.\jarvis.ps1 -NoFrontend` | Agent only (e.g. when using the phone app) |
+| `.\jarvis.ps1 -NoFrontend` | Agent only |
+| `.\jarvis.ps1 -Phone` | Also let the phone app connect over Wi-Fi (see below) |
 
 If PowerShell refuses to run the script, allow local scripts once:
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
@@ -94,9 +95,81 @@ If PowerShell refuses to run the script, allow local scripts once:
 - "Jarvis, in my website project, add a dark mode toggle." – starts a coding task
 - "How's that task going?" / "Stop the task." – checks on or cancels it
 - "You can run the tests for that one." – gives the coding agent shell access for the task
-- "Research the best Python web frameworks this year." – web research
+- "Research the best Python web frameworks this year." – web research; a full
+  write-up is saved to `%USERPROFILE%\Jarvis\reports`
+- "In my sandbox project, reverse engineer the save file format of game.exe." –
+  analysis report saved in that project's `reports` folder
 - "What's this error on my screen?" – share your screen in the web UI first (cloud mode)
 - "Switch to local mode." – takes effect from the next session
+
+## Optional: Jarvis on your phone
+
+1. Install the [Flutter SDK](https://docs.flutter.dev/get-started/install/windows).
+2. Start Jarvis with phone access:
+
+   ```powershell
+   .\jarvis.ps1 -Phone
+   ```
+
+   It prints two lines. The first time, it also creates a random
+   `JARVIS_PHONE_KEY` in `jarvis_new\.env.local`.
+3. Create `agent-starter-flutter\assets\.env` (see `assets\env.example`) with
+   those two lines:
+
+   ```
+   LIVEKIT_TOKEN_ENDPOINT=http://192.168.1.20:8787/token
+   JARVIS_PHONE_KEY=...
+   ```
+
+4. Plug in your phone and run:
+
+   ```powershell
+   cd agent-starter-flutter
+   flutter pub get
+   flutter run
+   ```
+
+The phone and PC must be on the same Wi-Fi. Allow Python through Windows
+Firewall for **private** networks when asked. The key is what stops other
+devices on your network from using Jarvis, so don't share it. The web UI only
+listens on the PC itself.
+
+## Optional: reverse-engineering tools
+
+The coding agent uses whatever analysis tools it finds, so install the ones you
+want. All of these are free:
+
+```powershell
+winget install EclipseAdoptium.Temurin.21.JDK   # Java, needed by Ghidra and jadx
+winget install radare.radare2
+dotnet tool install -g ilspycmd                   # .NET decompiler (needs the .NET SDK)
+```
+
+Download [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases)
+and [jadx](https://github.com/skylot/jadx/releases), unzip them, and add
+Ghidra's `support` folder (it contains `analyzeHeadless.bat`) and jadx's `bin`
+folder to your PATH.
+
+Reverse engineering needs shell access, so Jarvis asks before starting. Put
+samples inside an approved workspace (e.g. a `sandbox` workspace), and only
+analyse software you're allowed to.
+
+### Plug-in tools for the coding agent (MCP)
+
+Claude Code can use extra tools from MCP servers listed in
+`jarvis_new\config\coder-mcp.json`, for example a Ghidra MCP server:
+
+```json
+{
+  "mcpServers": {
+    "ghidra": { "command": "python", "args": ["C:/tools/GhidraMCP/bridge_mcp_ghidra.py"] }
+  }
+}
+```
+
+Then add `"mcp__ghidra"` to `allowed_tools` under `[cloud.coder]` in
+`config\modes.toml` so the coding agent may call them. Follow the MCP server's
+own instructions for installing it.
 
 ## Optional: local mode
 

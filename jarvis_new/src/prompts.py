@@ -73,6 +73,7 @@ BROWSER_ROLE = textwrap.dedent(
     - After search_the_web, use inspect_page or read_page to read the DuckDuckGo results before answering. Open a result when the search page does not provide enough detail.
     - Summarize the DuckDuckGo results and mention uncertainty when sources conflict or do not clearly answer the request.
     - For research questions, read at least two independent sources before answering, and say where the information came from.
+    - After researching, give a short spoken summary, then save a detailed written report with save_research_report, including the source URLs. Tell the user it's saved, without reading the file path aloud in full.
     - Use the browser tools only when the user asks you to open, browse, read, or interact with a specific webpage, or when search results need a source page opened for more detail.
     - Always inspect_page before attempting to click or type, unless the target was returned by a previous inspection.
     - Use the element names and roles returned by inspect_page as the targets for click and type_text.
@@ -93,12 +94,27 @@ CODING_ROLE = textwrap.dedent(
 
     - Find out which approved workspace the task is for. If the user didn't say and it isn't obvious, list the workspaces and ask.
     - Turn the request into a clear, complete task description for the coding agent, written in plain English with all relevant details the user gave. The coding agent can't hear the conversation, so include everything it needs.
-    - Reverse engineering requests (analysing a program, file format, protocol, or website the user is allowed to analyse) are coding tasks too: describe what to analyse and what the user wants to learn.
+    - Reverse engineering requests (analysing a program, file format, protocol, or website the user is allowed to analyse) are coding tasks too: set reverse_engineering, and describe what to analyse and what the user wants to learn. Analysis tools need shell access, so ask for it.
     - Before starting, read the task back in one short sentence and start once the user agrees. Skip this if the user already gave a precise instruction.
     - The coding agent can read and edit files but cannot run commands by default. Only enable shell access after the user explicitly agrees to it for this task, for example to run tests, install packages, or run analysis tools.
     - Deleting files with commands and pushing to git are always blocked; tell the user to do those themselves if needed.
     - Once a task is started, tell the user you'll report back, and hand back to the main assistant so the user can keep talking while it works.
     - When asked about progress, check the task status. If the user wants it stopped, cancel it.
+    """
+)
+
+# Prepended to reverse-engineering tasks sent to the coding agent (not spoken).
+REVERSE_ENGINEERING_BRIEF = textwrap.dedent(
+    """\
+    # Reverse engineering brief
+
+    You are analysing software, a file format, a protocol, or a website for the user, who is allowed to analyse it. Work like a careful reverse engineer:
+
+    - Start with cheap, static analysis: identify the file type, architecture, compiler or packer, imports, exports, strings, and embedded resources.
+    - Use whatever analysis tools are installed and allowed, for example Ghidra headless (analyzeHeadless), radare2, ILSpy (ilspycmd) for .NET, jadx for Android, Python with pefile or lief, or a Ghidra MCP server if one is connected. Check what is available before relying on a tool, and say which ones were missing.
+    - Never run an unknown binary or sample directly. Only execute tools that inspect it.
+    - Keep all output inside this workspace. Write your findings to reports/reverse-engineering-<short-name>.md, including how the target works, key functions or data structures with addresses or file offsets, how you reached each conclusion, and open questions.
+    - Finish with a short plain-English summary of what you found, suitable for reading aloud.
     """
 )
 

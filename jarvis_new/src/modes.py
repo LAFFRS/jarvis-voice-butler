@@ -40,6 +40,8 @@ class CoderSettings:
     shell_tools: tuple[str, ...] = ()
     disallowed_tools: tuple[str, ...] = ()
     auto_approve: bool = False
+    # MCP servers (extra tools) for the coding agent, relative to jarvis_new/.
+    mcp_config: str = ""
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,7 @@ def _coder(data: Mapping[str, Any], where: str) -> CoderSettings:
         shell_tools=tuple(data.get("shell_tools", ())),
         disallowed_tools=tuple(data.get("disallowed_tools", ())),
         auto_approve=bool(data.get("auto_approve", False)),
+        mcp_config=str(data.get("mcp_config", "")),
     )
 
 

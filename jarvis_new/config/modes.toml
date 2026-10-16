@@ -38,6 +38,10 @@ disallowed_tools = [
     "Bash(Remove-Item:*)",
     "Bash(format:*)",
 ]
+# Extra tools for Claude Code (e.g. a Ghidra MCP server). See SETUP-WINDOWS.md.
+# Tools from a server named "ghidra" are called mcp__ghidra__*; add
+# "mcp__ghidra" to allowed_tools to let the coding agent use them.
+mcp_config = "config/coder-mcp.json"
 
 [local]
 # Ollama: https://ollama.com  (ollama pull qwen3-coder:30b)

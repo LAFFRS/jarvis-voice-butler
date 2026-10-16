@@ -185,6 +185,16 @@ def resolve_executable(
     return [path]
 
 
+def resolve_mcp_config(setting: str, base: Path = CONFIG_DIR.parent) -> Path | None:
+    """The coding agent's MCP config file, if one is configured and exists."""
+    if not setting:
+        return None
+    path = Path(setting).expanduser()
+    if not path.is_absolute():
+        path = base / path
+    return path if path.is_file() else None
+
+
 @dataclass(frozen=True)
 class Invocation:
     argv: list[str]
@@ -220,6 +230,9 @@ def build_invocation(
             argv += ["--disallowedTools", ",".join(coder.disallowed_tools)]
         if coder.model:
             argv += ["--model", coder.model]
+        mcp_config = resolve_mcp_config(coder.mcp_config)
+        if mcp_config is not None:
+            argv += ["--mcp-config", str(mcp_config)]
         # The task goes through stdin so quoting can't break on Windows.
         return Invocation(argv=argv, stdin=task, parse_line=parse_claude_line)
 

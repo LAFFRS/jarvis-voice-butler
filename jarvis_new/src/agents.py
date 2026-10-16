@@ -20,7 +20,13 @@ from livekit.agents.llm import ToolError
 from browser import BrowserManager
 from delegate import CodingJob, CodingRunner, DelegateError, ProgressEvent
 from modes import MODES_FILE, ConfigError, JarvisConfig, load_config, save_mode
-from prompts import BROWSER_INSTRUCTIONS, CODING_INSTRUCTIONS, JARVIS_INSTRUCTIONS
+from prompts import (
+    BROWSER_INSTRUCTIONS,
+    CODING_INSTRUCTIONS,
+    JARVIS_INSTRUCTIONS,
+    REVERSE_ENGINEERING_BRIEF,
+)
+from reports import save_report
 from tools import BrowserTools
 
 
@@ -204,6 +210,29 @@ class BrowserAgent(_JarvisBase):
         )
 
     @function_tool()
+    async def save_research_report(
+        self,
+        context: RunContext,
+        title: str,
+        report: str,
+        sources: list[str],
+    ) -> str:
+        """Save a written research report for the user to read later. Use this
+        after researching a topic, or whenever the user asks for a write-up.
+
+        Args:
+            title: A short title for the report.
+            report: The full report in Markdown, with headings and detail. This is
+                written to a file, so normal formatting is fine here.
+            sources: The URLs the information came from.
+        """
+        try:
+            path = save_report(title, report, sources)
+        except (OSError, ValueError) as exc:
+            raise ToolError(f"Could not save the report: {exc}") from exc
+        return f"Saved the report as {path.name} in the {path.parent} folder."
+
+    @function_tool()
     async def back_to_jarvis(self, context: RunContext) -> tuple[Agent, str]:
         """Hand back to the main assistant when the web task is done or the user
         wants something that isn't web work."""
@@ -234,6 +263,7 @@ class CodingAgent(_JarvisBase):
         workspace: str,
         task: str,
         allow_shell: bool = False,
+        reverse_engineering: bool = False,
     ) -> str:
         """Start a coding agent on a task in one of the approved workspaces. It runs
         in the background and Jarvis reports progress automatically.
@@ -243,7 +273,11 @@ class CodingAgent(_JarvisBase):
             task: A complete, self-contained description of what to do.
             allow_shell: Let the coding agent run commands. Only true after the user
                 explicitly agreed to shell access for this task.
+            reverse_engineering: True when the task is to analyse a program, file
+                format, protocol, or website rather than to write code.
         """
+        if reverse_engineering:
+            task = REVERSE_ENGINEERING_BRIEF + "\n\n# The task\n\n" + task
         session = context.session
         narrator = ProgressNarrator(
             lambda instructions: session.generate_reply(instructions=instructions)

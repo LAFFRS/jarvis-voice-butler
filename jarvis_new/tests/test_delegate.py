@@ -15,6 +15,7 @@ from delegate import (
     parse_claude_line,
     parse_opencode_line,
     resolve_executable,
+    resolve_mcp_config,
     resolve_workspace,
 )
 from modes import CoderSettings
@@ -263,3 +264,31 @@ async def test_runner_refuses_unapproved_workspace(
     with pytest.raises(DelegateError, match="not an approved workspace"):
         await runner.start("windows", "delete everything")
     assert runner.current is None
+
+
+def test_mcp_config_is_passed_when_the_file_exists(tmp_path: Path) -> None:
+    config = tmp_path / "coder-mcp.json"
+    config.write_text('{"mcpServers": {}}', encoding="utf-8")
+    coder = CoderSettings(backend="claude", mcp_config=str(config))
+
+    inv = build_invocation(coder, "x", tmp_path, which=fake_which)
+
+    assert inv.argv[inv.argv.index("--mcp-config") + 1] == str(config)
+
+
+def test_missing_mcp_config_is_skipped(tmp_path: Path) -> None:
+    coder = CoderSettings(backend="claude", mcp_config="config/nope.json")
+
+    inv = build_invocation(coder, "x", tmp_path, which=fake_which)
+
+    assert "--mcp-config" not in inv.argv
+
+
+def test_relative_mcp_config_resolves_against_project(tmp_path: Path) -> None:
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "coder-mcp.json").write_text("{}", encoding="utf-8")
+
+    assert resolve_mcp_config("config/coder-mcp.json", base=tmp_path) == (
+        tmp_path / "config" / "coder-mcp.json"
+    )
+    assert resolve_mcp_config("", base=tmp_path) is None

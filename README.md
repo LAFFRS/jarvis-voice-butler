@@ -2,6 +2,28 @@
 
 A voice-controlled AI butler built on the **LiveKit Agents** framework. Speak to Jarvis, and it responds with a sarcastic British-butler persona while having full control over a real web browser — browsing, searching, clicking, typing, and completing tasks on your behalf.
 
+## Quick start (Windows)
+
+See **[SETUP-WINDOWS.md](SETUP-WINDOWS.md)** for full setup, then run `.\jarvis.ps1`.
+
+## How it fits together
+
+Jarvis is the voice and the coordinator. For real work it hands off to a specialist agent:
+
+| Agent | What it does | Lives in |
+|---|---|---|
+| Jarvis (main) | Conversation, quick answers, sees your shared screen, switches brain mode | `src/agents.py` |
+| Coding specialist | Runs a real coding agent (Claude Code or OpenCode) in an approved project folder, with spoken progress updates | `src/agents.py`, `src/delegate.py` |
+| Web specialist | Browsing, searching and multi-source research with the Playwright browser | `src/agents.py`, `src/tools.py` |
+
+**Brain switch** (`config/modes.toml`, `src/modes.py`):
+- `cloud`: Gemini Live voice + Claude Code
+- `local`: Whisper + Ollama + Kokoro voice + OpenCode/Ollama, all on your GPU
+
+Switch with `.\jarvis.ps1 -Mode local`, by editing the file, or by saying "Jarvis, switch to local mode".
+
+**Safety:** coding agents only work in folders listed in `config/workspaces.toml`, can't run commands unless you agree for that task, and can never `git push` or delete files with commands.
+
 ## Features
 
 - **Voice Conversations** — Real-time voice I/O powered by LiveKit with adaptive interruptions and preemptive generation

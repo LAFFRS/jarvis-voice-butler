@@ -1,0 +1,10 @@
+# Project folders Jarvis's coding agent is allowed to work in.
+# Jarvis refuses to run coding tasks anywhere else.
+#
+# The name on the left is what you say out loud: "Jarvis, in my website
+# project, add a contact form." Use forward slashes on Windows.
+
+[workspaces]
+jarvis = "C:/Users/YOU/code/jarvis-voice-butler"
+# website = "C:/Users/YOU/code/my-website"
+# sandbox = "C:/Users/YOU/code/sandbox"

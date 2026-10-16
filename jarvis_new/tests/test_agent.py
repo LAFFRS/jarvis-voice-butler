@@ -1,3 +1,4 @@
+import os
 import textwrap
 
 import pytest
@@ -5,9 +6,20 @@ from livekit.agents import AgentSession, inference, llm
 
 from agent import Assistant
 
+# These evals talk to real models through LiveKit Inference.
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("LIVEKIT_API_KEY"),
+    reason="needs LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env.local",
+)
+
 
 def _judge_llm() -> llm.LLM:
     return inference.LLM(model="openai/gpt-4.1-mini")
+
+
+def _agent_llm() -> llm.LLM:
+    # Agents use the session's model; evals use a text model via LiveKit Inference.
+    return inference.LLM(model="google/gemma-4-31b-it")
 
 
 @pytest.mark.asyncio
@@ -15,7 +27,7 @@ async def test_offers_assistance() -> None:
     """Evaluation of the agent's friendly nature."""
     async with (
         _judge_llm() as judge_llm,
-        AgentSession() as session,
+        AgentSession(llm=_agent_llm()) as session,
     ):
         await session.start(Assistant())
 
@@ -49,7 +61,7 @@ async def test_grounding() -> None:
     """Evaluation of the agent's ability to refuse to answer when it doesn't know something."""
     async with (
         _judge_llm() as judge_llm,
-        AgentSession() as session,
+        AgentSession(llm=_agent_llm()) as session,
     ):
         await session.start(Assistant())
 
@@ -93,7 +105,7 @@ async def test_refuses_harmful_request() -> None:
     """Evaluation of the agent's ability to refuse inappropriate or harmful requests."""
     async with (
         _judge_llm() as judge_llm,
-        AgentSession() as session,
+        AgentSession(llm=_agent_llm()) as session,
     ):
         await session.start(Assistant())
 
@@ -113,4 +125,49 @@ async def test_refuses_harmful_request() -> None:
         )
 
         # Ensures there are no function calls or other unexpected events
+        result.expect.no_more_events()
+
+
+@pytest.mark.asyncio
+async def test_coding_requests_go_to_the_coding_specialist() -> None:
+    async with AgentSession(llm=_agent_llm()) as session:
+        await session.start(Assistant())
+
+        result = await session.run(
+            user_input="Add a dark mode toggle to my website project."
+        )
+
+        result.expect.contains_function_call(name="transfer_to_coding")
+
+
+@pytest.mark.asyncio
+async def test_web_requests_go_to_the_web_specialist() -> None:
+    async with AgentSession(llm=_agent_llm()) as session:
+        await session.start(Assistant())
+
+        result = await session.run(user_input="Open YouTube for me.")
+
+        result.expect.contains_function_call(name="transfer_to_web")
+
+
+@pytest.mark.asyncio
+async def test_coding_questions_are_answered_directly() -> None:
+    async with (
+        _judge_llm() as judge_llm,
+        AgentSession(llm=_agent_llm()) as session,
+    ):
+        await session.start(Assistant())
+
+        result = await session.run(
+            user_input="Quickly, what's the difference between a list and a tuple in Python?"
+        )
+
+        await (
+            result.expect.next_event()
+            .is_message(role="assistant")
+            .judge(
+                judge_llm,
+                intent="Briefly explains that lists are mutable and tuples are immutable.",
+            )
+        )
         result.expect.no_more_events()

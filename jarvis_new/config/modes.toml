@@ -1,0 +1,62 @@
+# Jarvis brain switch.
+#
+# mode = "cloud" -> Gemini Live voice + Claude Code for coding work
+# mode = "local" -> Whisper (speech-to-text) + Ollama (brain) + Kokoro (voice),
+#                   and OpenCode + Ollama for coding work
+#
+# You can also say "Jarvis, switch to local mode" - it rewrites the line below
+# and takes effect on the next session. The JARVIS_MODE environment variable
+# overrides this file (handy for the launcher: .\jarvis.ps1 -Mode local).
+mode = "cloud"
+
+# Which coding agent to use: "auto" follows the mode above, or force
+# "cloud" / "local" to mix (e.g. cloud voice + local coding).
+coder = "auto"
+
+[cloud]
+realtime_model = "gemini-3.1-flash-live-preview"
+# Prebuilt Gemini voices: https://ai.google.dev/gemini-api/docs/speech-generation#voices
+voice = "Enceladus"
+language = "en-GB"
+# ai|coustics background noise removal (needs LiveKit Cloud).
+noise_cancellation = true
+
+[cloud.coder]
+backend = "claude"
+# Leave empty to use Claude Code's default model.
+model = ""
+permission_mode = "acceptEdits"
+allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "WebSearch", "WebFetch"]
+# Tools added only when you explicitly approve shell access for a task.
+shell_tools = ["Bash"]
+# Never allowed, even with shell access.
+disallowed_tools = [
+    "Bash(git push:*)",
+    "Bash(git reset --hard:*)",
+    "Bash(rm -rf:*)",
+    "Bash(del /s:*)",
+    "Bash(Remove-Item:*)",
+    "Bash(format:*)",
+]
+
+[local]
+# Ollama: https://ollama.com  (ollama pull qwen3-coder:30b)
+ollama_url = "http://localhost:11434/v1"
+# Same model as [local.coder] on purpose: two 30B models don't fit in 24GB of
+# VRAM together, and Ollama swapping between them adds multi-second pauses.
+llm_model = "qwen3-coder:30b"
+# Any OpenAI-compatible speech-to-text server, e.g. Speaches (faster-whisper).
+stt_url = "http://localhost:8000/v1"
+stt_model = "deepdml/faster-whisper-large-v3-turbo-ct2"
+# Any OpenAI-compatible text-to-speech server, e.g. Kokoro-FastAPI.
+tts_url = "http://localhost:8880/v1"
+tts_model = "kokoro"
+# bm_george / bm_lewis / bm_daniel are British male Kokoro voices.
+tts_voice = "bm_george"
+language = "en"
+
+[local.coder]
+backend = "opencode"
+model = "ollama/qwen3-coder:30b"
+# Let OpenCode auto-approve actions not explicitly denied in its own config.
+auto_approve = true

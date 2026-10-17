@@ -39,7 +39,8 @@ notepad .env.local
 Fill in `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` from your
 project at <https://cloud.livekit.io>, and `GOOGLE_API_KEY` from
 <https://aistudio.google.com/apikey>. Put the same three LiveKit values in
-`frontend\.env.local` too.
+`frontend\.env.local` too, and set `AGENT_NAME=my-agent` there. The launcher
+sets this for you, but you need it if you ever start the web UI by hand.
 
 ## 4. Tell Jarvis which project folders it may code in
 
@@ -101,6 +102,28 @@ If PowerShell refuses to run the script, allow local scripts once:
   analysis report saved in that project's `reports` folder
 - "What's this error on my screen?" – share your screen in the web UI first (cloud mode)
 - "Switch to local mode." – takes effect from the next session
+
+## Optional: plug-in tools for Jarvis
+
+Jarvis can use extra tools from any MCP server (GitHub, a calendar, a database,
+smart home, …). List them in `jarvis_new\config\jarvis-mcp.json`, in the same
+format most MCP servers document for Claude:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token" }
+    }
+  }
+}
+```
+
+Plug-ins load in the main Jarvis agent at the start of each session. Add
+`"disabled": true` to a server to switch it off. Every plug-in adds to what
+Jarvis has to consider on each reply, so keep only the ones you use.
 
 ## Optional: Jarvis on your phone
 

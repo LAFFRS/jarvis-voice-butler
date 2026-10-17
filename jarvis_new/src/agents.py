@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,7 @@ from livekit.agents.llm import ToolError
 from browser import BrowserManager
 from delegate import CodingJob, CodingRunner, DelegateError, ProgressEvent
 from modes import MODES_FILE, ConfigError, JarvisConfig, load_config, save_mode
+from plugins import PluginSpec, build_mcp_servers
 from prompts import (
     BROWSER_INSTRUCTIONS,
     CODING_INSTRUCTIONS,
@@ -38,6 +39,9 @@ class JarvisServices:
     browser: BrowserManager
     runner: CodingRunner
     modes_file: Path = MODES_FILE
+    # MCP plug-ins from config/jarvis-mcp.json, given to the main agent only so
+    # the specialists' tool lists stay small.
+    plugins: list[PluginSpec] = field(default_factory=list)
 
 
 def _end_call_tool() -> EndCallTool:
@@ -120,12 +124,15 @@ class _JarvisBase(Agent):
         instructions: str,
         tools: list,
         chat_ctx: Any = None,
+        mcp_servers: list[Any] | None = None,
     ) -> None:
         self.services = services
         self._end_call = _end_call_tool()
         kwargs: dict[str, Any] = {}
         if chat_ctx is not None:
             kwargs["chat_ctx"] = chat_ctx
+        if mcp_servers:
+            kwargs["mcp_servers"] = mcp_servers
         super().__init__(
             instructions=instructions,
             tools=[*tools, *self._end_call.tools],
@@ -151,6 +158,9 @@ class JarvisAgent(_JarvisBase):
             instructions=JARVIS_INSTRUCTIONS,
             tools=[],
             chat_ctx=chat_ctx,
+            # Fresh clients each time: LiveKit closes an agent's MCP servers when
+            # it hands off, and this agent is recreated on every handoff back.
+            mcp_servers=build_mcp_servers(services.plugins),
         )
 
     @function_tool()

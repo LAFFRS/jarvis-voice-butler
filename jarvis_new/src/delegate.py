@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -31,6 +32,7 @@ else:  # pragma: no cover
 logger = logging.getLogger("jarvis.delegate")
 
 WORKSPACES_FILE = CONFIG_DIR / "workspaces.toml"
+MAX_LINE_BYTES = 64 * 1024 * 1024
 
 
 class DelegateError(RuntimeError):
@@ -93,7 +95,7 @@ def describe_tool(name: str, tool_input: dict[str, Any] | None = None) -> str:
         return "running a command"
     if lowered in ("websearch", "webfetch"):
         return "looking something up online"
-    if lowered in ("todowrite", "task", "todo"):
+    if lowered in ("todowrite", "task", "todo", "skill"):
         return "planning the work"
     return f"using {name}"
 
@@ -179,10 +181,21 @@ def resolve_executable(
         raise DelegateError(
             f"'{name}' is not installed or not on PATH. See SETUP-WINDOWS.md."
         )
-    # npm installs Windows command shims as .cmd files, which need cmd.exe.
-    if path.lower().endswith((".cmd", ".bat")):
-        return ["cmd.exe", "/c", path]
     return [path]
+
+
+def spawn_plan(argv: list[str]) -> tuple[Literal["exec", "shell"], str | list[str]]:
+    """How to start `argv`: directly, or through cmd.exe for .cmd/.bat shims.
+
+    npm installs Windows commands as .cmd files, which only cmd.exe can run.
+    Passing `cmd.exe /c` and the arguments separately breaks when the shim's
+    path contains a space (cmd strips the first and last quote). The shell
+    route wraps the whole command line in one extra pair of quotes, which is
+    exactly what cmd strips, so every argument arrives intact.
+    """
+    if argv and argv[0].lower().endswith((".cmd", ".bat")):
+        return "shell", subprocess.list2cmdline(argv)
+    return "exec", argv
 
 
 def resolve_mcp_config(setting: str, base: Path = CONFIG_DIR.parent) -> Path | None:
@@ -344,22 +357,43 @@ class CodingRunner:
                 fh.write(task)
             task_file = Path(name)
 
-        invocation = build_invocation(
-            self.coder,
-            task,
-            folder,
-            allow_shell=allow_shell,
-            task_file=task_file,
-            which=self._which,
-        )
-        logger.info("starting coding task in %s: %s", folder, invocation.argv[:4])
-        self._process = await asyncio.create_subprocess_exec(
-            *invocation.argv,
-            cwd=str(folder),
-            stdin=asyncio.subprocess.PIPE if invocation.stdin is not None else None,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            invocation = build_invocation(
+                self.coder,
+                task,
+                folder,
+                allow_shell=allow_shell,
+                task_file=task_file,
+                which=self._which,
+            )
+            logger.info("starting coding task in %s: %s", folder, invocation.argv[:4])
+            options: dict[str, Any] = {
+                "cwd": str(folder),
+                "stdin": asyncio.subprocess.PIPE
+                if invocation.stdin is not None
+                else None,
+                "stdout": asyncio.subprocess.PIPE,
+                "stderr": asyncio.subprocess.PIPE,
+                # Claude Code prints whole tool results on one line; the default
+                # 64 KiB line limit would abort the task on any large file.
+                "limit": MAX_LINE_BYTES,
+            }
+            how, command = spawn_plan(invocation.argv)
+            if how == "shell":
+                self._process = await asyncio.create_subprocess_shell(
+                    command, **options
+                )
+            else:
+                self._process = await asyncio.create_subprocess_exec(
+                    *command, **options
+                )
+        except (DelegateError, OSError) as exc:
+            if task_file is not None:
+                with contextlib.suppress(OSError):
+                    task_file.unlink()
+            if isinstance(exc, DelegateError):
+                raise
+            raise DelegateError(f"Could not start the coding agent: {exc}") from exc
         job = CodingJob(workspace=workspace.strip().lower(), folder=folder, task=task)
         self.current = job
         self._task = asyncio.create_task(
@@ -420,6 +454,11 @@ class CodingRunner:
             job.status = "failed"
             job.summary = str(exc)
         finally:
+            # If anything went wrong while watching, don't leave the coding
+            # agent running unsupervised.
+            if proc.returncode is None:
+                with contextlib.suppress(Exception):
+                    await _kill_tree(proc)
             if task_file is not None:
                 with contextlib.suppress(OSError):
                     task_file.unlink()

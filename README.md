@@ -16,6 +16,8 @@ Jarvis is the voice and the coordinator. For real work it hands off to a special
 | Coding specialist | Runs a real coding agent (Claude Code or OpenCode) in an approved project folder, with spoken progress updates. Also does reverse engineering, writing findings to a report | `src/agents.py`, `src/delegate.py` |
 | Web specialist | Browsing, searching and multi-source research with the Playwright browser; saves research reports to `~/Jarvis/reports` | `src/agents.py`, `src/tools.py`, `src/reports.py` |
 
+**Plug-ins:** extra tools from MCP servers listed in `config/jarvis-mcp.json` (loaded by `src/plugins.py`).
+
 **Phone app:** `.\jarvis.ps1 -Phone` starts a key-protected token server (`src/phone_server.py`) so the Flutter app in `agent-starter-flutter/` can talk to Jarvis over Wi-Fi.
 
 **Brain switch** (`config/modes.toml`, `src/modes.py`):

@@ -17,6 +17,7 @@ from delegate import (
     resolve_executable,
     resolve_mcp_config,
     resolve_workspace,
+    spawn_plan,
 )
 from modes import CoderSettings
 
@@ -66,6 +67,7 @@ def test_describe_tool_names_the_file_being_edited() -> None:
     )
     assert describe_tool("Grep") == "reading the code"
     assert describe_tool("Bash") == "running a command"
+    assert describe_tool("Skill") == "planning the work"
 
 
 def test_parse_claude_assistant_and_result_lines() -> None:
@@ -150,10 +152,23 @@ def test_opencode_command_attaches_task_file(tmp_path: Path) -> None:
     assert inv.stdin is None
 
 
-def test_windows_cmd_shims_run_through_cmd() -> None:
-    argv = resolve_executable("claude", lambda _: "C:\\npm\\claude.CMD")
+def test_windows_cmd_shims_run_through_the_shell() -> None:
+    shim = "C:\\Users\\Jo Bloggs\\AppData\\Roaming\\npm\\claude.CMD"
+    how, command = spawn_plan(
+        [shim, "-p", "--disallowedTools", "Bash(git push:*),Bash(rm -rf:*)"]
+    )
 
-    assert argv == ["cmd.exe", "/c", "C:\\npm\\claude.CMD"]
+    assert how == "shell"
+    # Every argument with a space is quoted; cmd strips only the outer pair
+    # that Python's shell mode adds around this whole string.
+    assert command == (
+        '"C:\\Users\\Jo Bloggs\\AppData\\Roaming\\npm\\claude.CMD" -p '
+        '--disallowedTools "Bash(git push:*),Bash(rm -rf:*)"'
+    )
+
+
+def test_real_executables_run_directly() -> None:
+    assert spawn_plan(["/usr/bin/claude", "-p"]) == ("exec", ["/usr/bin/claude", "-p"])
 
 
 def test_missing_executable_is_reported() -> None:
@@ -172,6 +187,10 @@ def emit(obj):
 emit({"type": "system", "subtype": "init"})
 emit({"type": "assistant", "message": {"content": [
     {"type": "tool_use", "name": "Edit", "input": {"file_path": "main.py"}}]}})
+if "huge" in task:
+    # Claude Code prints whole tool results (e.g. a read file) on one line.
+    emit({"type": "user", "message": {"content": [{"type": "tool_result",
+          "content": "x" * 300_000}]}})
 if "slow" in task:
     time.sleep(30)
 if "fail" in task:
@@ -292,3 +311,65 @@ def test_relative_mcp_config_resolves_against_project(tmp_path: Path) -> None:
         tmp_path / "config" / "coder-mcp.json"
     )
     assert resolve_mcp_config("", base=tmp_path) is None
+
+
+async def test_runner_handles_very_long_output_lines(
+    tmp_path: Path, fake_claude: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = make_runner(tmp_path, fake_claude, monkeypatch)
+
+    job = await runner.start("project", "read a huge file")
+    await asyncio.wait_for(runner.wait(), timeout=20)
+
+    assert job.status == "done", job.summary
+    assert job.summary == "Finished: read a huge file"
+
+
+async def test_launch_failure_is_reported_and_cleans_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import delegate
+
+    created: list[Path] = []
+    real_mkstemp = delegate.tempfile.mkstemp
+
+    def tracking_mkstemp(*args, **kwargs):
+        fd, name = real_mkstemp(*args, **kwargs)
+        created.append(Path(name))
+        return fd, name
+
+    monkeypatch.setattr(delegate.tempfile, "mkstemp", tracking_mkstemp)
+    monkeypatch.setattr(
+        delegate,
+        "resolve_executable",
+        lambda name, which=None: [str(tmp_path / "missing-binary")],
+    )
+    runner = CodingRunner(OPENCODE, {"project": tmp_path})
+
+    with pytest.raises(DelegateError, match="Could not start"):
+        await runner.start("project", "anything")
+
+    assert created and not created[0].exists()
+    assert runner.current is None
+
+
+async def test_watcher_crash_stops_the_coding_agent(
+    tmp_path: Path, fake_claude: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import delegate
+
+    runner = make_runner(tmp_path, fake_claude, monkeypatch)
+
+    def broken_parser(line: str):
+        raise RuntimeError("parser bug")
+
+    monkeypatch.setattr(delegate, "parse_claude_line", broken_parser)
+
+    job = await runner.start("project", "slow task")
+    proc = runner._process
+    await asyncio.wait_for(runner.wait(), timeout=20)
+
+    assert job.status == "failed"
+    assert "parser bug" in job.summary
+    # The fake agent sleeps for 30s; it must have been stopped, not left running.
+    assert proc.returncode is not None

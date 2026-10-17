@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -16,16 +17,26 @@ from agents import JarvisAgent, JarvisServices
 from browser import BrowserManager
 from delegate import CodingRunner, load_workspaces
 from modes import JarvisConfig, build_session_models, load_config
+from plugins import PluginConfigError, load_plugin_specs
+
+logger = logging.getLogger("jarvis")
 
 # Resolve relative to this file so the launcher can start Jarvis from anywhere.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env.local")
 
 
 def build_services(config: JarvisConfig, *, headless: bool = True) -> JarvisServices:
+    try:
+        plugins = load_plugin_specs()
+    except PluginConfigError:
+        # A typo in the plug-in file shouldn't stop Jarvis from starting.
+        logger.exception("ignoring config/jarvis-mcp.json")
+        plugins = []
     return JarvisServices(
         config=config,
         browser=BrowserManager(headless=headless),
         runner=CodingRunner(config.coder, load_workspaces()),
+        plugins=plugins,
     )
 
 
